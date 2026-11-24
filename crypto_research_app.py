@@ -94,3 +94,66 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("Indicator guide")
 st.markdown(
+    """
+    - **RSI:** A momentum oscillator. Values near 70 or 30 are commonly watched,
+      but they are not reliable standalone reversal signals.
+    - **MACD:** Compares moving averages to describe momentum changes.
+    - **EMA 20 / EMA 50:** Smoothed price averages used to study trend context.
+    - **Volume:** Shows how much of the asset traded during each candle.
+    - **Volatility:** Measures how much recent percentage returns have varied.
+    """
+)
+
+# Descriptive context only; intentionally no next-candle forecast or UP/DOWN signal.
+trend_notes = []
+if latest["close"] > latest["ema20"] and latest["ema20"] > latest["ema50"]:
+    trend_notes.append("Recent price and moving-average alignment is consistent with a positive short-term trend.")
+elif latest["close"] < latest["ema20"] and latest["ema20"] < latest["ema50"]:
+    trend_notes.append("Recent price and moving-average alignment is consistent with a negative short-term trend.")
+else:
+    trend_notes.append("Moving averages are mixed; the recent trend is not clearly aligned.")
+
+if pd.notna(latest["rsi"]):
+    if latest["rsi"] >= 70:
+        trend_notes.append("RSI is in a commonly watched high range; this does not by itself mean price must fall.")
+    elif latest["rsi"] <= 30:
+        trend_notes.append("RSI is in a commonly watched low range; this does not by itself mean price must rise.")
+    else:
+        trend_notes.append("RSI is between the commonly watched 30 and 70 levels.")
+
+if pd.notna(latest["macd"]) and pd.notna(latest["macd_signal"]):
+    trend_notes.append(
+        "MACD is above its signal line." if latest["macd"] > latest["macd_signal"]
+        else "MACD is below its signal line."
+    )
+
+st.subheader("Current historical-indicator context")
+for note in trend_notes:
+    st.write("• " + note)
+
+st.subheader("Compare major crypto assets")
+assets = ["BTC/USD", "ETH/USD", "SOL/USD"]
+comparison = {}
+try:
+    for asset in assets:
+        frame = load_ohlcv(asset, timeframe, limit)
+        frame["return_pct"] = frame["close"].pct_change() * 100
+        comparison[asset] = frame.set_index("timestamp")["return_pct"]
+    returns = pd.DataFrame(comparison).dropna()
+    st.write("Correlation of candle returns over the loaded period")
+    st.dataframe(returns.corr().round(3), use_container_width=True)
+except Exception as exc:
+    st.warning(f"Cross-asset comparison was unavailable: {exc}")
+
+st.subheader("Recent data")
+st.dataframe(
+    data[["timestamp", "open", "high", "low", "close", "volume",
+          "rsi", "macd", "ema20", "ema50"]].tail(20).sort_values("timestamp", ascending=False),
+    use_container_width=True
+)
+
+st.caption(
+    "Data source: Kraken public market candles via CCXT. "
+    "Data can be delayed, incomplete, or unavailable. Kraken is used instead of Binance for public market data. This app does not connect to Kalshi, "
+    "recommend bets, or forecast future price direction."
+)
